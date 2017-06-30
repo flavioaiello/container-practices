@@ -36,10 +36,9 @@ Running a process in a container as root is bad practice. The switch user `su` c
 FROM alpine:3.6
 
 RUN set -ex;\
-    apk update;\
-    apk upgrade;\
+    ...
     apk add --no-cache su-exec;\
-    rm -rf /var/cache/apk/*;\
+    ...
     echo "*** Add myone system account ***";\
     addgroup -S myone;\
     adduser -S -D -h /home/myone -s /bin/false -G myone -g "myone system account" myone;\
