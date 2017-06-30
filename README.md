@@ -1,5 +1,33 @@
 # Docker best practices
 
+## Produce generic images
+Docker images should be as general as possible, at least they must be environment agnostic. For this purpose the concrete values must be provided by environment variables during startup. Environment variables keys must follow `IEEE Std 1003.1-2001`, restricting the direct usage. The value of environment variables is not restricted and can take any character. This constraint leads to the pattern `MY_KEY=my.complex.key;my.complex.value` as shown below:
+
+### Example `docker-compose.yml` excerpt
+```
+version: '3.2'
+
+services:
+
+  myservice:
+    image: myimage
+    environment:
+      - DB_CONNECTION=my.complex.key;jdbc://foo.bar:1234/foodb
+  ...
+```
+
+### Example `entrypoint.sh` excerpt
+```
+#!/bin/sh
+
+echo "*** Loop all env variables matching the substitution pattern for stage specific configuration ***"
+for VARIABLE in $(env |grep -o '^.*=.*;.*'); do
+    PROPERTY=${VARIABLE#*=}
+    echo "*** Set key ${PROPERTY%;*} to value ${PROPERTY#*;} ***"
+    find /home/myone -type f -exec sed -i "s|\${${PROPERTY%;*}}|${PROPERTY#*;}|g" {} +
+done
+```
+
 ## Run not as root
 Running a process in a container as root is really bad practice. The switch user `su` command brings some TTY hassle and `gosu` is deprecated in the meantime. For this purpose now you can use `su-exec`, a really lean alternative included in alpine linux.
 
