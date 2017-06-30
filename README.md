@@ -55,7 +55,7 @@ exec su-exec mytechuser "$@"
 ```
 
 ## Mount volumes as technical user
-Running a process in a container as root is bad practice. The switch user `su` command brings some TTY hassle and `gosu` is deprecated in the meantime. For this purpose you can use now `su-exec`, a lean alternative included in alpine linux.
+When mounting external volumes and having the process owned by a technical user, permission errors arise. This can be resolved by resetting the permissions during the container startup:
 
 ### Example `entrypoint.sh` excerpt
 ```
