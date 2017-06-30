@@ -163,9 +163,6 @@ LABEL TAG=${TAG}
 ```
 
 ## Bill of Materials (BOM)
-The attack surface of a container is determined by the amount of additional packages provided with the software artifacts. Having a bill of materials available enables reporting to be processed for vulnerability checking.
-```
-LABEL BOM="apk info -vv"
-```
+The attack surface of a container is determined by the amount of additional packages provided with the software artifacts. Having a bill of materials available enables reporting to be processed for vulnerability checking. At the moment there is no way to have a `LABEL` filled with the content of `apk info -vv` during the `docker build`.
 
 More to come ... stay tuned
