@@ -25,11 +25,9 @@ This one is deprecated as soon the `init: true` property is available on docker 
 
 ### Example `Dockerfile` excerpt
 ```
-...
-
+RUN set -ex;\
     apk add --no-cache tini;\
-
-...
+    ...
 
 ENTRYPOINT ["/sbin/tini", "--", "entrypoint.sh"]
 CMD ["myprocess", "-myargument=true"]
@@ -64,6 +62,16 @@ RUN set -ex;\
     su-exec myone cp -rf /files/. /
 ```
 
+## Installing software as one-liner
+This is a very simple operation a can be performed in a simple manner, in just one piped statement:
+
+### Example `Dockerfile` excerpt
+```
+RUN set -ex;\
+    curl -sSL https://mydomain.com/mysoftware.tar.gz | tar -C /usr/local/bin -xvz;\
+    ...
+```
+
 ## wait-for-it / wait-for
 A pure shell section that will to be included in the `entrypoint.sh`. Waiting a predefined timespan for a service to be responsive. This is useful on the startup of your containers. The predicatable exit during the startup makes the container restart depending on the policy on your deploy section of the recipe.
 
@@ -96,5 +104,19 @@ services:
         max_attempts: 3
 ```
 
+## Release Tags
+Usually source build takes place in advance natively or in a build container on the local or build system, producing build artifacts. The runtime build eg. `docker build` afterwards sources those artifacts in to the docker image. This step ommits the version and the docker image must be versioned separately. It is recommended to provide this portion of information using the `--build-args` argument during the build. For this purpose use the `ARG` AND `LABEL` directive in the `Dockerfile`. This one enables you to report also the exact release of those containers deployed by using the `latest` tag.
+
+### Example `Dockerfile` excerpt
+```
+ARG TAG
+LABEL TAG=${TAG}
+```
+
+## Bill of Materials - BOM
+tbd
+```
+apk info -vv
+```
 
 more to come ... stay tuned
