@@ -133,7 +133,7 @@ services:
 ```
 
 ## Release Tags
-Usually source build takes place in advance natively or in a build container on the local or build system, producing build artifacts. The runtime build eg. `docker build` afterwards sources those artifacts in to the docker image. This step ommits the version and the docker image must be versioned separately. It is recommended to provide this portion of information using the `--build-args` argument during the build. For this purpose use the `ARG` AND `LABEL` directive in the `Dockerfile`. This one enables you to report also the exact release of those containers deployed by using the `latest` tag.
+Usually the source build takes place in advance natively or in a build container on the local or build system producing build artifacts. The runtime build eg. `docker build` afterwards sources those artifacts in to the docker image. This step ommits the version and the docker image must be versioned separately. It is recommended to provide this portion of information using the `--build-args` argument during the build. For this purpose use the `ARG` AND `LABEL` directive in the `Dockerfile`. This  enables you to report also the specific release of containers deployed using the `latest` tag.
 
 ### Example `Dockerfile` excerpt
 ```
