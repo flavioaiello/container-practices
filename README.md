@@ -29,7 +29,7 @@ done
 ```
 
 ## Run not as root
-Running a process in a container as root is really bad practice. The switch user `su` command brings some TTY hassle and `gosu` is deprecated in the meantime. For this purpose now you can use `su-exec`, a really lean alternative included in alpine linux.
+Running a process in a container as root is bad practice. The switch user `su` command brings some TTY hassle and `gosu` is deprecated in the meantime. For this purpose you can use now `su-exec`, a lean alternative included in alpine linux.
 
 ### Example `Dockerfile` excerpt
 ```
