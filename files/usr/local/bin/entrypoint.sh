@@ -12,5 +12,8 @@ for SERVICE in ${SERVICES}; do
     timeout -t ${TIMEOUT:-60} sh -c -- "while ! nc -z ${SERVICE%:*} ${SERVICE#*:}; do sleep 1; done" || exit "$?"
 done
 
-echo "*** Startup $0 suceeded now starting service ***"
+echo "*** Fix permissions when mounting external volumes running on technical user ***"
+chown -R mytechuser:mytechuser /data/database/
+
+echo "*** Startup $0 suceeded now starting service owned by technical user ***"
 exec su-exec myone "$@"
