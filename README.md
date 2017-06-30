@@ -1,7 +1,7 @@
 # The docker best practices blueprint
 
 ## Produce generic images
-Docker images should be as general as possible, at least they must be environment agnostic. For this purpose the concrete values must be provided by environment variables during startup. Environment variables keys must follow `IEEE Std 1003.1-2001`, restricting the direct usage. The value of environment variables is not restricted and can take any character. This constraint leads to the pattern `MY_KEY=my.complex.key;my.complex.value` as shown below:
+Docker images should be as general as possible, at least they must be environment agnostic. For this purpose the concrete values must be provided by environment variables during startup. Environment variables key names must follow `IEEE Std 1003.1-2001`, restricting the direct usage. The value of environment variables is not restricted and can take any character. This constraint leads to the pattern `MY_KEY=my.complex.key;my.complex.value` as shown below:
 
 ### Example `docker-compose.yml` excerpt
 ```
