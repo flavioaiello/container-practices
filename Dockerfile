@@ -22,6 +22,8 @@ RUN set -ex;\
     
 WORKDIR /home/mytechuser
 
+VOLUME ["/data/database/"]
+
 RUN set -ex;\
     curl -sSL https://mydomain.com/mysoftware.tar.gz | tar -C /usr/local/bin -xvz
 
