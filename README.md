@@ -54,7 +54,7 @@ COPY files /
 ```
 The overlay action above copies the files as root due to `COPY` not following the `USER` directive. The most effective way to fix permissions in terms of space consumption is, to shift the directory switching the user as shown below:
 
-### Example `Dockerfile` excerpt
+### Example `Dockerfile` excerpt
 ```
 # Add local files to image
 COPY files /files
@@ -65,7 +65,7 @@ RUN set -ex;\
 ```
 
 ## wait-for-it / wait-for
-A pure shell script that will wait a predefined timespan for a service to be responsive. This is useful for containers on the startup phase on the `entrypoint.sh` script. Aborting the startup makes the container restart depending on the restart policy on the deploy section of your recipe.
+A pure shell section that will to be included in the `entrypoint.sh`. Waiting a predefined timespan for a service to be responsive. This is useful on the startup of your containers. The predicatable exit during the startup makes the container restart depending on the policy on your deploy section of the recipe.
 
 ### Example `entrypoint.sh` excerpt
 ```
