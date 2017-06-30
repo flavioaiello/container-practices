@@ -123,7 +123,7 @@ RUN set -ex;\
 ```
 
 ## Service dependencies (wait-for-it / wait-for)
-A pure shell excerpt that needs to be included in the `entrypoint.sh`. Waiting a predefined timespan for a service to be responsive. This is useful on the startup of your containers. Exiting during the startup if the service is not reachable, makes the container restart depending on the policy on your deploy section of the recipe.
+A pure shell excerpt that needs to be included in the `entrypoint.sh`. Waiting a predefined timespan for a service to be responsive. Exiting during the startup if the service is not reachable. This makes the container restart depending on the policy on your deploy section of the recipe.
 
 ### Example `entrypoint.sh` excerpt
 ```
@@ -154,7 +154,7 @@ services:
 ```
 
 ## Release Tags
-Usually the source build takes place in advance natively or in a build container on the local or build system producing build artifacts. The runtime build eg. `docker build` afterwards sources those artifacts in to the docker image. This step ommits the version and the docker image must be versioned separately. It is recommended to provide this portion of information using the `--build-args` argument during the build. For this purpose use the `ARG` AND `LABEL` directive in the `Dockerfile`. This  enables you to report also the specific release of containers deployed using the `latest` tag.
+Usually the source build takes place in advance natively or in a build container on the local or build system producing build artifacts. The runtime build eg. `docker build` afterwards sources those artifacts in to the docker image. This step ommits the version and the docker image must be versioned separately. It is recommended to provide this portion of information using the `--build-args` argument during the build. For this purpose use the `ARG` AND `LABEL` directive in the `Dockerfile`. This  enables deployment reporting, allowing also the `latest` tag to be reported with a specific release tag.
 
 ### Example `Dockerfile` excerpt
 ```
@@ -162,10 +162,10 @@ ARG TAG
 LABEL TAG=${TAG}
 ```
 
-## Bill of Materials - BOM
-tbd
+## Bill of Materials (BOM)
+The attack surface of a container is determined by the amount of additional packages provided with the software artifacts. Having a bill of materials available enables reporting to be processed for vulnerability checking.
 ```
-apk info -vv
+LABEL BOM="apk info -vv"
 ```
 
-more to come ... stay tuned
+More to come ... stay tuned
