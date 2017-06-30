@@ -24,27 +24,43 @@ echo "*** Loop all env variables matching the substitution pattern for stage spe
 for VARIABLE in $(env |grep -o '^.*=.*;.*'); do
     PROPERTY=${VARIABLE#*=}
     echo "*** Set key ${PROPERTY%;*} to value ${PROPERTY#*;} ***"
-    find /home/myone -type f -exec sed -i "s|\${${PROPERTY%;*}}|${PROPERTY#*;}|g" {} +
+    find /home/mytechuser -type f -exec sed -i "s|\${${PROPERTY%;*}}|${PROPERTY#*;}|g" {} +
 done
 ```
 
-## Run not as root
-Running a process in a container as root is bad practice. The switch user `su` command brings some TTY hassle and `gosu` is deprecated in the meantime. For this purpose you can use now `su-exec`, a lean alternative included in alpine linux.
+## Run as technical user
+Running a process in a container as root is bad practice. The switch user `su` command brings TTY hassle and `gosu` is deprecated due to `su-exec` offering the same with less effort.
 
 ### Example `Dockerfile` excerpt
 ```
-FROM alpine:3.6
-
+...
 RUN set -ex;\
     ...
     apk add --no-cache su-exec;\
     ...
-    echo "*** Add myone system account ***";\
-    addgroup -S myone;\
-    adduser -S -D -h /home/myone -s /bin/false -G myone -g "myone system account" myone;\
-    chown -R myone /home/myone
+    echo "*** Add mytechuser system account ***";\
+    addgroup -S mytechuser;\
+    adduser -S -D -h /home/mytechuser -s /bin/false -G mytechuser -g "mytechuser system account" mytechuser;\
+    chown -R mytechuser /home/mytechuser
+...
+ENTRYPOINT ["entrypoint.sh"]
+CMD ["myprocess", "-myargument=true"]
+```
+### Example `entrypoint.sh` excerpt
+```
+#!/bin/sh
+...
+echo "*** Startup suceeded now starting service as PID 1 owned by technical user ***"
+exec su-exec mytechuser "$@"
+```
 
-CMD ["su-exec", "myone", "myprocess"]
+## Mount volumes as technical user
+Running a process in a container as root is bad practice. The switch user `su` command brings some TTY hassle and `gosu` is deprecated in the meantime. For this purpose you can use now `su-exec`, a lean alternative included in alpine linux.
+
+### Example `entrypoint.sh` excerpt
+```
+echo "*** Fix permissions when mounting external volumes running on technical user ***"
+chown -R mytechuser:mytechuser /data/database/
 ```
 
 ## Cleanup zombie processes
@@ -67,30 +83,31 @@ CMD ["myprocess", "-myargument=true"]
 ...
 
 echo "*** Startup $0 suceeded now starting service ***"
-exec su-exec myone "$@"
+exec su-exec mytechuser "$@"
 ```
 ## Copy multiple directory structures at once
-Create beside of the `Dockefile` a `files` folder taking all directory structures and according files that need to be copied to the docker image during the build:
+Create beside of the `Dockefile` a separated `files` folder taking all directory structures and according files that need to be copied to the docker image during the build:
 
 ### Example `Dockerfile` excerpt
 ```
 # Add local files to image
 COPY files /
 ```
-The overlay action above copies the files as root due to `COPY` not following the `USER` directive. The most effective way to fix permissions in terms of space consumption is, to shift the directory switching the user as shown below:
+
+`COPY` or `ADD` are not following the `USER` directive available on the `Dockerile` reference. The most effective way to fix permissions in terms of space consumption is, to shift the overlay directory structure impersonating the user as shown below:
 
 ### Example `Dockerfile` excerpt
 ```
 # Add local files to image
 COPY files /files
 
-# Copy with fixed ownership for myone user
+# Copy with fixed ownership for mytechuser user
 RUN set -ex;\
-    su-exec myone cp -rf /files/. /
+    su-exec mytechuser cp -rf /files/. /
 ```
 
 ## Installing software as one-liner
-This is a very simple operation a can be performed in a simple manner, in just one piped statement:
+This is a very simple operation a can be performed in just one piped statement:
 
 ### Example `Dockerfile` excerpt
 ```
@@ -98,9 +115,15 @@ RUN set -ex;\
     curl -sSL https://mydomain.com/mysoftware.tar.gz | tar -C /usr/local/bin -xvz;\
     ...
 ```
+In case only the subdirectories are required:
+```
+RUN set -ex;\
+    curl -sSL https://mydomain.com/mysoftware.tar.gz | tar -C /usr/local/bin -xvz --strip-components=1 mysoftware-${MYSOFTWARE_VERSION};\
+    ...
+```
 
-## wait-for-it / wait-for
-A pure shell section that will to be included in the `entrypoint.sh`. Waiting a predefined timespan for a service to be responsive. This is useful on the startup of your containers. The predicatable exit during the startup makes the container restart depending on the policy on your deploy section of the recipe.
+## Service dependencies (wait-for-it / wait-for)
+A pure shell excerpt that needs to be included in the `entrypoint.sh`. Waiting a predefined timespan for a service to be responsive. This is useful on the startup of your containers. Exiting during the startup if the service is not reachable, makes the container restart depending on the policy on your deploy section of the recipe.
 
 ### Example `entrypoint.sh` excerpt
 ```
@@ -112,7 +135,6 @@ for SERVICE in ${SERVICES}; do
 done
 ```
 Since it is a pure sh script snippet, it does not have any external dependencies.
-
 
 ### Example `docker-compose.yml` excerpt
 ```
