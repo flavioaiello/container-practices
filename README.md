@@ -123,9 +123,9 @@ RUN set -ex;\
 ```
 
 ## Service dependencies (wait-for-it / wait-for)
-A pure shell excerpt that needs to be included in the `entrypoint.sh`. Waiting a predefined timespan for a service to be responsive. Exiting during the startup if the service is not reachable. This makes the container restart depending on the policy on your deploy section of the recipe.
+A pure shell excerpt that needs to be included in the `entrypoint.sh`. Waiting a predefined timespan for a service to be responsive. Exiting during the startup if the service is not reachable. This makes the container restart depending on the policy on your deploy section of the recipe. Since it is a pure sh script snippet, it does not have any external dependencies.
 
-### Example `entrypoint.sh` excerpt
+### Example `entrypoint.sh` excerpt - Waiting for tcp deamon
 ```
 #!/bin/sh
 
@@ -134,7 +134,13 @@ for SERVICE in ${SERVICES}; do
     timeout -t ${TIMEOUT:-60} sh -c -- "while ! nc -z ${SERVICE%:*} ${SERVICE#*:}; do sleep 1; done" || exit "$?"
 done
 ```
-Since it is a pure sh script snippet, it does not have any external dependencies.
+### Example `entrypoint.sh` excerpt - Waiting for http status 200
+```
+for SERVICE in ${SERVICES}; do
+    echo "*** Waiting for service ${SERVICE%:*} port ${SERVICE#*:} with timeout ${TIMEOUT:-60} ***"
+    timeout -t ${TIMEOUT:-60} sh -c -- "while [ $(curl -sf -o /dev/null -w "%{http_code}" "http://${SERVICE%:*}:${SERVICE#*:}/") -ne "200" ]; do sleep 1; done" || exit "$?"
+done
+```
 
 ### Example `docker-compose.yml` excerpt
 ```
