@@ -14,9 +14,9 @@ RUN set -ex;\
     echo "*** Add mytechuser system account ***";\
     addgroup -S mytechuser;\
     adduser -S -D -h /home/mytechuser -s /bin/false -G mytechuser -g "mytechuser system account" mytechuser;\
-    chown -R myone /home/mytechuser
+    chown -R mytechuser /home/mytechuser
 
-# Copy with fixed ownership for myone user
+# Copy with fixed ownership for mytechuser user
 RUN set -ex;\
     su-exec mytechuser cp -rf /files/. /
     
