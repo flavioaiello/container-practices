@@ -28,6 +28,28 @@ RUN set -ex;\
 ## Exec
 ```
 
+## Use a zombie reaper
+This is deprecated as soon the `init: true` property is available on docker compose v3.x recipes. For now, `tini` is recommended for single process containers and must be included in to the `Dockerfile` and `entrypoint.sh` as shown below:
+`Dockerfile`
+```
+...
+
+    apk add --no-cache tini;\
+
+...
+
+ENTRYPOINT ["/sbin/tini", "--", "entrypoint.sh"]
+CMD ["myprocess", "-myargument=true"]
+```
+`entrypoint.sh`
+```
+#!/bin/sh
+
+...
+
+echo "*** Startup $0 suceeded now starting service ***"
+exec su-exec myone "$@"
+```
 ## Copy multiple directory structures at once
 Create beside of the `Dockefile` a `files` folder taking all directory structures and according files that need to be copied to the docker image during the build:
 ```
