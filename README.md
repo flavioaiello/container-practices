@@ -136,6 +136,8 @@ done
 ```
 ### Example `entrypoint.sh` excerpt - Waiting for http status 200
 ```
+#!/bin/sh
+
 for SERVICE in ${SERVICES}; do
     echo "*** Waiting for service ${SERVICE%:*} port ${SERVICE#*:} with timeout ${TIMEOUT:-60} ***"
     timeout -t ${TIMEOUT:-60} sh -c -- "while [ $(curl -sf -o /dev/null -w "%{http_code}" "http://${SERVICE%:*}:${SERVICE#*:}/") -ne "200" ]; do sleep 1; done" || exit "$?"
