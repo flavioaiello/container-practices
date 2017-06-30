@@ -86,7 +86,7 @@ echo "*** Startup $0 suceeded now starting service ***"
 exec su-exec mytechuser "$@"
 ```
 ## Copy multiple directory structures at once
-Create beside of the `Dockefile` a separated `files` folder taking all directory structures and according files that need to be copied to the docker image during the build:
+Create beside of the `Dockefile` a separated `files` directory taking the full structure and the according files that need to be copied to the docker image during the build:
 
 ### Example `Dockerfile` excerpt
 ```
