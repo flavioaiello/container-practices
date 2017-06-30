@@ -64,7 +64,7 @@ chown -R mytechuser:mytechuser /data/database/
 ```
 
 ## Cleanup zombie processes
-Using Docker 1.13 or greater, tini is included in Docker itself. This includes all versions of Docker CE. To enable Tini, just pass the `--init` flag to `docker run`. When deploying using `docker stack deploy` or `docker-compoose` this property is missing. As soon the `init: true` property is available on docker compose v3.x recipes, the explicit setup on `Dockerfile` and `entrypoint.sh` as shown below is deprecated.
+Using Docker 1.13 or greater, tini is included in Docker itself. This includes all versions of Docker CE. To enable Tini, just pass the `--init` flag to `docker run`. When deploying using `docker stack deploy` or `docker-compose` this property is missing. As soon the `init: true` property is available on docker compose v3.x recipes, the explicit setup on `Dockerfile` and `entrypoint.sh` as shown below is deprecated.
 
 ### Example `Dockerfile` excerpt
 ```
