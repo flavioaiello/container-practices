@@ -11,16 +11,16 @@ RUN set -ex;\
     apk upgrade;\
     apk add --no-cache su-exec tini;\
     rm -rf /var/cache/apk/*;\
-    echo "*** Add myone system account ***";\
-    addgroup -S myone;\
-    adduser -S -D -h /home/myone -s /bin/false -G myone -g "myone system account" myone;\
-    chown -R myone /home/myone
+    echo "*** Add mytechuser system account ***";\
+    addgroup -S mytechuser;\
+    adduser -S -D -h /home/mytechuser -s /bin/false -G mytechuser -g "mytechuser system account" mytechuser;\
+    chown -R myone /home/mytechuser
 
 # Copy with fixed ownership for myone user
 RUN set -ex;\
-    su-exec myone cp -rf /files/. /
+    su-exec mytechuser cp -rf /files/. /
     
-WORKDIR /home/myone
+WORKDIR /home/mytechuser
 
 RUN set -ex;\
     curl -sSL https://mydomain.com/mysoftware.tar.gz | tar -C /usr/local/bin -xvz
