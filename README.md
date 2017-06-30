@@ -1,7 +1,9 @@
 # Docker best practices
 
 ## Run not as root
+Running a process in a container as root is really bad practice. The switch user `su` command brings some TTY hassle and `gosu` is deprecated in the meantime. For this purpose now you can use `su-exec`, a really lean alternative included in alpine linux.
 
+### Example `Dockerfile` excerpt
 ```
 FROM alpine:3.6
 
@@ -15,22 +17,13 @@ RUN set -ex;\
     adduser -S -D -h /home/myone -s /bin/false -G myone -g "myone system account" myone;\
     chown -R myone /home/myone
 
-WORKDIR /home/myone
-
-# 
-RUN set -ex;\
-    
-    echo "*** Installing XYZ ***";\
-    su-exec myone install.sh
-    
-    
-
-## Exec
+CMD ["su-exec", "myone", "myprocess"]
 ```
 
 ## Use a zombie reaper
-This is deprecated as soon the `init: true` property is available on docker compose v3.x recipes. For now, `tini` is recommended for single process containers and must be included in to the `Dockerfile` and `entrypoint.sh` as shown below:
-`Dockerfile`
+This one is deprecated as soon the `init: true` property is available on docker compose v3.x recipes. For now, `tini` is recommended for single process containers and must be included as shown below:
+
+### Example `Dockerfile` excerpt
 ```
 ...
 
@@ -41,7 +34,8 @@ This is deprecated as soon the `init: true` property is available on docker comp
 ENTRYPOINT ["/sbin/tini", "--", "entrypoint.sh"]
 CMD ["myprocess", "-myargument=true"]
 ```
-`entrypoint.sh`
+
+### Example `entrypoint.sh` excerpt
 ```
 #!/bin/sh
 
@@ -52,11 +46,15 @@ exec su-exec myone "$@"
 ```
 ## Copy multiple directory structures at once
 Create beside of the `Dockefile` a `files` folder taking all directory structures and according files that need to be copied to the docker image during the build:
+
+### Example `Dockerfile` excerpt
 ```
 # Add local files to image
 COPY files /
 ```
 The overlay action above copies the files as root due to `COPY` not following the `USER` directive. The most effective way to fix permissions in terms of space consumption is, to shift the directory switching the user as shown below:
+
+### Example `Dockerfile` excerpt
 ```
 # Add local files to image
 COPY files /files
@@ -69,7 +67,7 @@ RUN set -ex;\
 ## wait-for-it / wait-for
 A pure shell script that will wait a predefined timespan for a service to be responsive. This is useful for containers on the startup phase on the `entrypoint.sh` script. Aborting the startup makes the container restart depending on the restart policy on the deploy section of your recipe.
 
-### Usage in `entrypoint.sh`
+### Example `entrypoint.sh` excerpt
 ```
 #!/bin/sh
 
@@ -80,7 +78,8 @@ done
 ```
 Since it is a pure sh script snippet, it does not have any external dependencies.
 
-### Example on docker-compose.sh
+
+### Example `docker-compose.yml` excerpt
 ```
 version: '3.2'
 
