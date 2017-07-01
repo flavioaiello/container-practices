@@ -16,4 +16,4 @@ echo "*** Fix permissions when mounting external volumes running on technical us
 chown -R mytechuser:mytechuser /data/database/
 
 echo "*** Startup $0 suceeded now starting service owned by technical user ***"
-exec su-exec myone "$@"
+exec su-exec mytechuser "$@"
