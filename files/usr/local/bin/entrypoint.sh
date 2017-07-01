@@ -4,7 +4,7 @@ echo "*** Loop all env variables matching the substitution pattern for stage spe
 for VARIABLE in $(env |grep -o '^.*=.*;.*'); do
     PROPERTY=${VARIABLE#*=}
     echo "*** Set key ${PROPERTY%;*} to value ${PROPERTY#*;} ***"
-    find /home/myone -type f -exec sed -i "s|\${${PROPERTY%;*}}|${PROPERTY#*;}|g" {} +
+    find /home/mytmytechuser -type f -exec sed -i "s|\${${PROPERTY%;*}}|${PROPERTY#*;}|g" {} +
 done
 
 for SERVICE in ${SERVICES}; do
