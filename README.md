@@ -107,7 +107,7 @@ RUN set -ex;\
 ```
 
 ## Installing software as one-liner
-This is a very simple operation a can be performed in just one piped statement:
+This is a very simple operation and can be performed in just one piped statement:
 
 ### Example `Dockerfile` excerpt
 ```
