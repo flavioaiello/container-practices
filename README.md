@@ -53,29 +53,6 @@ CMD ["myprocess", "-myargument=true"]
 echo "*** Startup suceeded now starting service as PID 1 owned by technical user ***"
 exec su-exec mytechuser "$@"
 ```
-## Expand environment variables in CMD
-Lets say you want to start a java process inside a container. In this case you need further options and you want to start the process directly (eg. without the catalina.sh wrapper in case of tomcat). First of all start the process using the catalina.sh wrapper. Then inside the container grab the execution statement of your process using `ps ef|less`. Subdivide now to options and command section and this will be your new CMD.
-
-### Example `Dockerfile` excerpt
-```
-...
-ENV JAVA_OPTS -XX:+UnlockExperimentalVMOptions -XX:+UseCGroupMemoryLimitForHeap -XX:MaxRAMFraction=1 -XshowSettings:vm
-...
-ENTRYPOINT ["entrypoint.sh"]
-CMD ["myprocess", "${JAVA_OPTS}", "-myargument=true"]
-```
-
-### Example `entrypoint.sh` excerpt
-```
-#!/bin/sh
-...
-echo "*** Expand env variables in Dockerfile CMD statement ***"
-CMD=${@/\$\{JAVA_OPTS\}/${JAVA_OPTS}}
-CMD=${CMD/\$\{CATALINA_OPTS\}/${CATALINA_OPTS}}
-
-echo "*** Startup $0 suceeded now starting service ***"
-exec su-exec mytechuser ${CMD}
-```
 
 ## Mount volumes as technical user
 When mounting external volumes and having the process owned by a technical user, permission errors arise. This can be resolved by resetting the permissions during the container startup:
@@ -108,6 +85,31 @@ CMD ["myprocess", "-myargument=true"]
 echo "*** Startup $0 suceeded now starting service ***"
 exec su-exec mytechuser "$@"
 ```
+
+## Expand environment variables in CMD
+Lets say you want to start a java process inside a container. In this case you need further options and you want to start the process directly (eg. without the catalina.sh wrapper in case of tomcat). First of all start the process using the catalina.sh wrapper. Then inside the container grab the execution statement of your process using `ps ef|less`. Subdivide now to options and command section and this will be your new CMD.
+
+### Example `Dockerfile` excerpt
+```
+...
+ENV JAVA_OPTS -XX:+UnlockExperimentalVMOptions -XX:+UseCGroupMemoryLimitForHeap -XX:MaxRAMFraction=1 -XshowSettings:vm
+...
+ENTRYPOINT ["/sbin/tini", "--", "entrypoint.sh"]
+CMD ["myprocess", "${JAVA_OPTS}", "-myargument=true"]
+```
+
+### Example `entrypoint.sh` excerpt
+```
+#!/bin/sh
+...
+echo "*** Expand env variables in Dockerfile CMD statement ***"
+CMD=${@/\$\{JAVA_OPTS\}/${JAVA_OPTS}}
+CMD=${CMD/\$\{CATALINA_OPTS\}/${CATALINA_OPTS}}
+
+echo "*** Startup $0 suceeded now starting service ***"
+exec su-exec mytechuser ${CMD}
+```
+
 ## Copy directory structure at once
 Create beside of the `Dockefile` a separated `files` directory taking the full structure and the according files that need to be copied to the docker image during the build:
 
