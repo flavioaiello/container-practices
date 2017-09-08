@@ -102,12 +102,8 @@ CMD ["myprocess", "${JAVA_OPTS}", "-myargument=true"]
 ```
 #!/bin/sh
 ...
-echo "*** Expand env variables in Dockerfile CMD statement ***"
-CMD=${@/\$\{JAVA_OPTS\}/${JAVA_OPTS}}
-CMD=${CMD/\$\{CATALINA_OPTS\}/${CATALINA_OPTS}}
-
-echo "*** Startup $0 suceeded now starting service ***"
-exec su-exec mytechuser ${CMD}
+echo "*** Startup $0 suceeded now starting service using eval to expand CMD variables ***"
+exec su-exec mytechuser $(eval echo "$@")
 ```
 
 ## Copy directory structure at once
