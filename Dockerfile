@@ -28,4 +28,4 @@ RUN set -ex;\
     curl -sSL https://mydomain.com/mysoftware.tar.gz | tar -C /usr/local/bin -xvz
 
 ENTRYPOINT ["/sbin/tini", "--", "entrypoint.sh"]
-CMD ["myprocess", "-myargument=true"]
+CMD ["myprocess", "${JAVA_OPTS}", "-myargument=true"]
