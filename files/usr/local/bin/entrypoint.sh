@@ -1,7 +1,7 @@
 #!/bin/sh
 
 echo "*** Loop all env variables matching the substitution pattern for stage specific configuration ***"
-for VARIABLE in $(env |grep -o '^.*=.*;.*'); do
+env | grep -o '^.*=.*;.*' | while read VARIABLE; do
     PROPERTY=${VARIABLE#*=}
     echo "*** Set key ${PROPERTY%;*} to value ${PROPERTY#*;} ***"
     find /home/mytechuser -type f -exec sed -i "s|\${${PROPERTY%;*}}|${PROPERTY#*;}|g" {} +
