@@ -152,8 +152,9 @@ A pure shell excerpt that needs to be included in the `entrypoint.sh`. Waiting a
 
 for SERVICE in ${SERVICES}; do
     echo "*** Waiting for service ${SERVICE%:*} port ${SERVICE#*:} with timeout ${TIMEOUT:-60} ***"
-    timeout -t ${TIMEOUT:-60} sh -c -- "while ! nc -z ${SERVICE%:*} ${SERVICE#*:}; do sleep 1; done" || exit "$?"
+    for (( i=1; i<=${TIMEOUT:-60}; i++ )); do nc -z -w 7 ${SERVICE%:*} ${SERVICE#*:}; sleep 1; done || exit "$?"
 done
+
 ```
 ### Example `entrypoint.sh` excerpt - Waiting for http status 200
 ```
@@ -161,7 +162,7 @@ done
 
 for SERVICE in ${SERVICES}; do
     echo "*** Waiting for service ${SERVICE%:*} port ${SERVICE#*:} with timeout ${TIMEOUT:-60} ***"
-    timeout -t ${TIMEOUT:-60} sh -c -- "while [ $(curl -sf -o /dev/null -w "%{http_code}" "http://${SERVICE%:*}:${SERVICE#*:}/") -ne "200" ]; do sleep 1; done" || exit "$?"
+    for (( i=1; i<=${TIMEOUT:-60}; i++ )); do while [ $(curl -sf -o /dev/null -w "%{http_code}" "http://${SERVICE%:*}:${SERVICE#*:}/") -ne "200" ]; do sleep 1; done; done" || exit "$?"
 done
 ```
 
