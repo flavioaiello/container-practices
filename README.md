@@ -67,7 +67,7 @@ chown -R mytechuser:mytechuser /data/database/
 Using Docker 1.13 or greater, tini is included in Docker itself. This includes all versions of Docker CE. To enable Tini, just pass the `--init` flag to `docker run`. When deploying using `docker stack deploy` or `docker-compose` this property is missing. As soon the `init: true` property is available on docker compose v3.x recipes, the explicit setup on `Dockerfile` and `entrypoint.sh` as shown below is deprecated.
 
 #### Warning
-Be careful when using a signal handler like tini or the built-in init when starting a shell script like catalina.sh. In production this leads to major outages due to catalina.sh wrapper in case of tomcat itself restarting the process in some situations and and the handler interfering, thus exiting unexpected the container.
+Be careful when using an additional or the built-in signal handler when starting a shell script like the catalina.sh wrapper in case of tomcat. In production this leads to major outages due to the script restarting the process in some situations causing a handler interference, thus exiting unexpected the container.
 
 ### Example `Dockerfile` excerpt
 ```
