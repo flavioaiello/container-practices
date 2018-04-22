@@ -164,7 +164,7 @@ done
 
 for SERVICE in ${SERVICES}; do
     echo "*** Waiting for service ${SERVICE%:*} port ${SERVICE#*:} with timeout ${TIMEOUT:-60} ***"
-    for i in $(seq ${TIMEOUT:-60}); do while [ $(curl -sf -o /dev/null -w "%{http_code}" "http://${SERVICE%:*}:${SERVICE#*:}/") -ne "200" ]; do sleep 1; done; done" || exit "$?"
+    for i in $(seq ${TIMEOUT:-60}); do while [ $(curl -sf -o /dev/null -w "%{http_code}" "http://${SERVICE%:*}:${SERVICE#*:}/") -ne "200" ]; do sleep 1; done; done || exit "$?"
 done
 ```
 
