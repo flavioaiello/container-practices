@@ -129,6 +129,13 @@ RUN set -ex;\
     su-exec mytechuser cp -rf /files/. /
 ```
 
+Since v17.09.0-ce the change of ownership can be accomplished directly during `COPY` or `ADD` as shown below:
+### Example `Dockerfile` excerpt
+```
+# Add local files to image
+COPY --chown=mytechuser:mytechgroup files /
+```
+
 ## Installing software as one-liner
 This is a very simple operation and can be performed in just one piped statement:
 
