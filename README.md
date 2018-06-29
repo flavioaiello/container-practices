@@ -161,7 +161,7 @@ A pure shell excerpt that needs to be included in the `entrypoint.sh`. Waiting a
 
 for SERVICE in ${SERVICES}; do
     echo "*** Waiting for service ${SERVICE%:*} port ${SERVICE#*:} with timeout ${TIMEOUT:-60} ***"
-    for i in $(seq ${TIMEOUT:-60}); do nc -z -w 7 ${SERVICE%:*} ${SERVICE#*:}; sleep 1; done || exit "$?"
+    for i in $(seq ${TIMEOUT:-60}); do nc -z -w 7 ${SERVICE%:*} ${SERVICE#*:} && break; sleep 1; done || exit "$?"
 done
 
 ```
