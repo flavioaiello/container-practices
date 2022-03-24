@@ -1,4 +1,4 @@
-FROM alpine:3.7
+FROM alpine:3.14.4
 
 ARG TAG
 LABEL TAG=${TAG}
