@@ -1,208 +1,494 @@
-# Container Practices 
-A collection of recurring snippets and best practices to write stable and resilient containers for production
+# Container Image Best Practices
 
-## Generic images
-Docker images should be as general as possible, at least they must be environment agnostic. For this purpose the concrete values must be provided by environment variables during startup. Environment variables key names must follow `IEEE Std 1003.1-2001`, restricting the direct usage. The value of environment variables is not restricted and can take any character. This constraint leads to the pattern `MY_KEY=my.complex.key;my.complex.value` as shown below:
+A comprehensive guide to building secure, efficient, and production-ready container images using current state-of-the-art techniques. Container technology evolves rapidly - always verify recommendations against the latest documentation and security advisories.
 
-### Example `docker-compose.yml` excerpt
+## Table of Contents
+1. [Core Principles](#core-principles)
+2. [Security Best Practices](#security-best-practices)
+3. [Build Optimization](#build-optimization)
+4. [Configuration Management](#configuration-management)
+5. [Integration](#integration)
+6. [Runtime Management](#runtime-management)
+7. [Cloud-Native Patterns](#cloud-native-patterns)
+8. [Modern Tooling](#modern-tooling)
+9. [Operational Excellence](#operational-excellence)
+10. [Compliance and Governance](#compliance-and-governance)
+
+---
+
+## Core Principles
+
+### Minimal Base Images
+```dockerfile
+# Use minimal, updated base images
+FROM alpine:3.19
+# Or distroless for even smaller attack surface
+# FROM gcr.io/distroless/static-debian11
 ```
-version: '3.2'
+
+### Multi-Stage Builds
+```dockerfile
+# Build stage
+FROM golang:1.21-alpine AS builder
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -o app .
+
+# Runtime stage
+FROM alpine:3.19
+RUN apk add --no-cache ca-certificates tzdata
+COPY --from=builder /app/app .
+USER 1000:1000
+CMD ["./app"]
+```
+
+### Immutable Infrastructure
+- Never modify running containers
+- Rebuild and redeploy for changes
+- Use read-only filesystems where possible
+
+---
+
+## Security Best Practices
+
+### Non-Root Execution
+```dockerfile
+# Create dedicated user
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
+
+# Or use numeric UID/GID
+USER 1000:1000
+```
+
+### Read-Only Filesystem
+```yaml
+# docker-compose.yml
+services:
+  app:
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+      - /run:rw,size=1m
+```
+
+### Capability Management
+```yaml
+# docker-compose.yml
+services:
+  app:
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - NET_BIND_SERVICE
+```
+
+### Security Profiles
+```yaml
+# docker-compose.yml
+services:
+  app:
+    security_opt:
+      - no-new-privileges:true
+      - apparmor:docker-default
+      - seccomp:seccomp-profile.json
+```
+
+### Vulnerability Scanning
+```bash
+# Scan images during CI
+docker scan --severity HIGH myimage:latest
+trivy image --severity CRITICAL myimage:latest
+grype myimage:latest
+```
+
+### Secrets Management
+```dockerfile
+# Use build-time secrets
+RUN --mount=type=secret,id=github_token,target=/root/.ssh/id_rsa \
+    git clone git@github.com:myorg/myrepo.git
+```
+
+```yaml
+# docker-compose.yml
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
 
 services:
-
-  myservice:
-    image: myimage
+  app:
+    secrets:
+      - db_password
     environment:
-      - DB_CONNECTION=my.complex.key;jdbc://foo.bar:1234/foodb
-  ...
+      DB_PASSWORD_FILE: /run/secrets/db_password
 ```
 
-### Example `entrypoint.sh` excerpt
+---
+
+## Build Optimization
+
+### Layer Caching Strategy
+```dockerfile
+# Order instructions from least to most frequently changed
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN go build -o app .
 ```
+
+### BuildKit Features
+```bash
+# Enable BuildKit
+export DOCKER_BUILDKIT=1
+
+# Build with secrets
+docker build --secret id=mytoken,src=/local/secret .
+
+# Multi-platform builds
+docker buildx build --platform linux/amd64,linux/arm64 -t myapp:latest .
+```
+
+### Image Compression
+```bash
+# Use docker-slim for extreme optimization
+docker-slim build --http-probe myimage:latest
+
+# Or use dive to analyze layers
+dive myimage:latest
+```
+
+### SBOM Generation
+```bash
+# Generate Software Bill of Materials
+syft myimage:latest -o cyclonedx-json > sbom.json
+```
+
+---
+
+## Configuration Management
+
+### Environment Variables
+```dockerfile
+# Use env files for configuration
+ENV APP_ENV=production
+ENV APP_PORT=8080
+```
+
+### Configuration Injection
+```bash
 #!/bin/sh
-
-echo "*** Loop all env variables matching the substitution pattern for stage specific configuration ***"
-env | grep -o '^.*=.*;.*' | while read VARIABLE; do
-    PROPERTY=${VARIABLE#*=}
-    echo "*** Set key ${PROPERTY%;*} to value ${PROPERTY#*;} ***"
-    find /home/mytechuser -type f -exec sed -i "s|\${${PROPERTY%;*}}|${PROPERTY#*;}|g" {} +
-done
+# entrypoint.sh
+envsubst < /app/config.template > /app/config.ini
+exec "$@"
 ```
 
-## Run as technical user
-Running a process in a container as root is bad practice. The switch user `su` command brings TTY hassle and `gosu` is deprecated due to `su-exec` offering the same with less effort.
-
-### Example `Dockerfile` excerpt
-```
-...
-RUN set -ex;\
-    ...
-    apk add --no-cache su-exec;\
-    ...
-    echo "*** Add mytechuser system account ***";\
-    addgroup -S mytechuser;\
-    adduser -S -D -h /home/mytechuser -s /bin/false -G mytechuser -g "mytechuser system account" mytechuser;\
-    chown -R mytechuser /home/mytechuser
-...
-ENTRYPOINT ["entrypoint.sh"]
-CMD ["myprocess", "-myargument=true"]
-```
-### Example `entrypoint.sh` excerpt
-```
-#!/bin/sh
-...
-echo "*** Startup suceeded now starting service as PID 1 owned by technical user ***"
-exec su-exec mytechuser "$@"
+### ConfigMaps and Secrets (Kubernetes)
+```yaml
+# k8s-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  config.ini: |
+    [database]
+    host = ${DB_HOST}
+    port = ${DB_PORT}
 ```
 
-## Mount volumes as technical user
-When mounting external volumes and having the process owned by a technical user, permission errors arise. This can be resolved by resetting the permissions during the container startup:
+---
 
-### Example `entrypoint.sh` excerpt
-```
-echo "*** Fix permissions when mounting external volumes running on technical user ***"
-chown -R mytechuser:mytechuser /data/database/
-```
+## Integration
 
-## Cleanup zombie processes
-Using Docker 1.13 or greater, tini is included in Docker itself. This includes all versions of Docker CE. To enable Tini, just pass the `--init` flag to `docker run`. When deploying using `docker stack deploy` or `docker-compose` this property is missing. As soon the `init: true` property is available on docker compose v3.x recipes, the explicit setup on `Dockerfile` and `entrypoint.sh` as shown below is deprecated.
-
-#### Warning
-Be careful when using an additional or the built-in signal handler when starting a shell script like the catalina.sh wrapper in case of tomcat. In production this leads to major outages due to the script restarting the process in some situations causing a handler interference, thus exiting unexpected the container.
-
-### Example `Dockerfile` excerpt
-```
-RUN set -ex;\
-    apk add --no-cache tini;\
-    ...
-
-ENTRYPOINT ["/sbin/tini", "--", "entrypoint.sh"]
-CMD ["myprocess", "-myargument=true"]
-```
-### Example `entrypoint.sh` excerpt
-```
-#!/bin/sh
-
-...
-
-echo "*** Startup $0 suceeded now starting service ***"
-exec su-exec mytechuser "$@"
-```
-
-## Expand environment variables in CMD
-Lets say you want to start a java process inside a container. In this case you need further options and you want to start the process directly (eg. without the catalina.sh wrapper in case of tomcat). First of all start the process using the catalina.sh wrapper. Then inside the container grab the execution statement of your process using `ps ef|less`. Subdivide now to options and command section and this will be your new CMD.
-
-### Example `Dockerfile` excerpt
-```
-...
-ENV JAVA_OPTS -XX:+UnlockExperimentalVMOptions -XX:+UseCGroupMemoryLimitForHeap -XX:MaxRAMFraction=1 -XshowSettings:vm
-...
-ENTRYPOINT ["/sbin/tini", "--", "entrypoint.sh"]
-CMD ["myprocess", "${JAVA_OPTS}", "-myargument=true"]
+### GitHub Actions Example
+```yaml
+name: Build and Push
+on:
+  push:
+    branches: [ main ]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Build and push
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ghcr.io/${{ github.repository }}:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: 'ghcr.io/${{ github.repository }}:latest'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
 ```
 
-### Example `entrypoint.sh` excerpt
-```
-#!/bin/sh
-...
-echo "*** Startup $0 suceeded now starting service using eval to expand CMD variables ***"
-exec su-exec mytechuser $(eval echo "$@")
-```
-
-## Copy directory structure at once
-Create beside of the `Dockefile` a separated `files` directory taking the full structure and the according files that need to be copied to the docker image during the build:
-
-### Example `Dockerfile` excerpt
-```
-# Add local files to image
-COPY files /
-```
-
-`COPY` or `ADD` are not following the `USER` directive available on the `Dockerile` reference. The most effective way to fix permissions in terms of space consumption is, to shift the overlay directory structure impersonating the user as shown below:
-
-### Example `Dockerfile` excerpt
-```
-# Add local files to image
-COPY files /files
-
-# Copy with fixed ownership for mytechuser user
-RUN set -ex;\
-    su-exec mytechuser cp -rf /files/. /
+### GitLab CI Example
+```yaml
+build:
+  stage: build
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker buildx build --platform linux/amd64,linux/arm64 -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA --push .
+    - docker buildx build --platform linux/amd64,linux/arm64 -t $CI_REGISTRY_IMAGE:latest --push .
 ```
 
-Since v17.09.0-ce the change of ownership can be accomplished directly during `COPY` or `ADD` as shown below:
-### Example `Dockerfile` excerpt
-```
-# Add local files to image
-COPY --chown=mytechuser:mytechgroup files /
+---
+
+## Runtime Management
+
+### Health Checks
+```dockerfile
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8080/health || exit 1
 ```
 
-## Installing software as one-liner
-This is a very simple operation and can be performed in just one piped statement:
-
-### Example `Dockerfile` excerpt
-```
-RUN set -ex;\
-    curl -sSL https://mydomain.com/mysoftware.tar.gz | tar -C /usr/local/bin -xvz;\
-    ...
-```
-In case only the subdirectories are required:
-```
-RUN set -ex;\
-    curl -sSL https://mydomain.com/mysoftware.tar.gz | tar -C /usr/local/bin -xvz --strip-components=1 mysoftware-${MYSOFTWARE_VERSION};\
-    ...
-```
-
-## Service dependencies (wait-for-it / wait-for)
-A pure shell excerpt that needs to be included in the `entrypoint.sh`. Waiting a predefined timespan for a service to be responsive. Exiting during the startup if the service is not reachable. This makes the container restart depending on the policy on your deploy section of the recipe. Since it is a pure sh script snippet, it does not have any external dependencies.
-
-### Example `entrypoint.sh` excerpt - Waiting for tcp deamon
-```
-#!/bin/sh
-
-for SERVICE in ${SERVICES}; do
-    echo "*** Waiting for service ${SERVICE%:*} port ${SERVICE#*:} with timeout ${TIMEOUT:-60} ***"
-    for i in $(seq ${TIMEOUT:-60}); do nc -z -w 7 ${SERVICE%:*} ${SERVICE#*:} && break; sleep 1; done || exit "$?"
-done
-
-```
-### Example `entrypoint.sh` excerpt - Waiting for http status 200
-```
-#!/bin/sh
-
-for SERVICE in ${SERVICES}; do
-    echo "*** Waiting for service ${SERVICE%:*} port ${SERVICE#*:} with timeout ${TIMEOUT:-60} ***"
-    for i in $(seq ${TIMEOUT:-60}); do while [ $(curl -sf -o /dev/null -w "%{http_code}" "http://${SERVICE%:*}:${SERVICE#*:}/") -ne "200" ]; do sleep 1; done; done || exit "$?"
-done
-```
-
-### Example `docker-compose.yml` excerpt
-```
-version: '3.2'
-
+### Resource Constraints
+```yaml
+# docker-compose.yml
 services:
-
-  myservice:
-    image: myimage
-    environment:
-      - SERVICES=database:9000 observer:5001
-      - TIMEOUT=120
+  app:
     deploy:
-      restart_policy:
-        condition: on-failure
-        max_attempts: 3
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
 ```
 
-## Release Tags
-Usually the build of the software sources takes place natively or in a build container in advance on the local workstation or build system producing build artifacts like war-, jar- , etc. files. The runtime build eg. `docker build` afterwards sources those artifacts in to the docker image. This step ommits the version and the docker image must be versioned separately. It is recommended to provide this portion of information using the `--build-args` argument during the build. For this purpose use the `ARG` AND `LABEL` directive in the `Dockerfile`. This  enables deployment reporting, allowing also the `latest` tag to be reported with a specific release tag.
-
-### Example `Dockerfile` excerpt
+### Graceful Shutdown
+```bash
+#!/bin/sh
+# entrypoint.sh
+trap 'echo "Shutting down..."; kill -TERM $PID; wait $PID' TERM INT
+"$@" &
+PID=$!
+wait $PID
 ```
-ARG TAG
-LABEL TAG=${TAG}
+
+### Service Dependencies
+```bash
+#!/bin/sh
+# Wait for services with improved reliability
+wait-for-it.sh db:5432 --timeout=60 --strict
+wait-for-it.sh redis:6379 --timeout=30 --strict
 ```
 
-## Bill of Materials (BOM)
-The attack surface of a container is determined by the amount of additional packages provided with the software artifacts. Having a bill of materials available enables reporting to be processed for vulnerability checking. At the moment there is no way to have a `LABEL` filled with the content of `apk info -vv` during the `docker build`.
+---
 
-More to come ... stay tuned
+## Cloud-Native Patterns
+
+### Kubernetes Readiness and Liveness
+```yaml
+# k8s-deployment.yaml
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 15
+  periodSeconds: 20
+```
+
+### Service Mesh Integration
+```yaml
+# Istio sidecar injection
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp
+  annotations:
+    sidecar.istio.io/inject: "true"
+```
+
+### Horizontal Pod Autoscaling
+```yaml
+# k8s-hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: myapp
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: myapp
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+```
+
+---
+
+## Modern Tooling
+
+### Container Signing
+```bash
+# Sign images with cosign
+cosign sign --key cosign.key myimage:latest
+
+# Verify signatures
+cosign verify --key cosign.pub myimage:latest
+```
+
+### Multi-Architecture Builds
+```bash
+# Build for multiple architectures
+docker buildx create --use
+docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t myapp:latest --push .
+```
+
+### Container Runtime Security
+```bash
+# Use Falco for runtime security
+falco -r /etc/falco/rules.yaml
+
+# Or use Aqua Security
+aqua trace --container mycontainer
+```
+
+---
+
+## Operational Excellence
+
+### Structured Logging
+```bash
+# Log in JSON format for better parsing
+echo '{"timestamp":"'"$(date -Iseconds)"'","level":"info","message":"Application started"}'
+```
+
+### Metrics Exposure
+```dockerfile
+# Expose metrics endpoint
+EXPOSE 8080
+```
+
+### Distributed Tracing
+```yaml
+# Jaeger integration
+environment:
+  JAEGER_AGENT_HOST: jaeger
+  JAEGER_AGENT_PORT: 6831
+```
+
+### Container Monitoring
+```yaml
+# Prometheus monitoring
+annotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
+```
+
+---
+
+## Compliance and Governance
+
+### OCI Compliance
+```dockerfile
+# OCI-compliant labels
+LABEL org.opencontainers.image.authors="team@example.com"
+LABEL org.opencontainers.image.description="My production application"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.source="https://github.com/myorg/myapp"
+```
+
+### Policy Enforcement
+```opa
+# Open Policy Agent example
+package docker.authz
+
+allow {
+  input.request.method == "GET"
+  input.request.path == "/health"
+}
+```
+
+### Container Image Verification
+```bash
+# Verify image integrity
+cosign verify myimage:latest --key cosign.pub
+
+# Check for vulnerabilities
+grype myimage:latest
+```
+
+---
+
+## Validation Checklist
+- [ ] Container runs as non-root user
+- [ ] Base image is minimal and up-to-date
+- [ ] Multi-stage build is implemented
+- [ ] Health checks are configured
+- [ ] Resource limits are set
+- [ ] Secrets are properly managed
+- [ ] Image is signed
+- [ ] SBOM is generated
+- [ ] Vulnerability scanning passes
+- [ ] Read-only filesystem is used where possible
+- [ ] Capabilities are minimized
+- [ ] Structured logging is implemented
+- [ ] Metrics are exposed
+
+---
+
+## Resources
+
+### Documentation
+- [Docker Security Best Practices](https://docs.docker.com/engine/security/)
+- [Kubernetes Security Guidelines](https://kubernetes.io/docs/concepts/security/)
+- [Open Container Initiative](https://opencontainers.org/)
+- [CNCF Cloud Native Landscape](https://landscape.cncf.io/)
+
+### Tools
+- [BuildKit](https://docs.docker.com/develop/develop-images/build_enhancements/)
+- [Docker Buildx](https://docs.docker.com/buildx/working-with-buildx/)
+- [Cosign](https://github.com/sigstore/cosign)
+- [Trivy](https://github.com/aquasecurity/trivy)
+- [Syft](https://github.com/anchore/syft)
+- [Grype](https://github.com/anchore/grype)
+
+### Communities
+- [CNCF](https://www.cncf.io/)
+- [Docker Community](https://www.docker.com/community)
+- [Kubernetes Community](https://kubernetes.io/community/)
