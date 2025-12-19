@@ -1,6 +1,6 @@
 # Container Image Best Practices
 
-A comprehensive guide to building secure, efficient, and production-ready container images using current state-of-the-art techniques. Container technology evolves rapidly - always verify recommendations against the latest documentation and security advisories.
+A comprehensive guide to building secure, efficient, and production-ready container images using current state-of-the-art techniques. This guide focuses on OCI-compliant practices that work across container runtimes including **Docker**, **Podman**, and **Buildah**. Container technology evolves rapidly - always verify recommendations against the latest documentation and security advisories.
 
 ## Table of Contents
 1. [Core Principles](#core-principles)
@@ -11,37 +11,44 @@ A comprehensive guide to building secure, efficient, and production-ready contai
 6. [Runtime Management](#runtime-management)
 7. [Cloud-Native Patterns](#cloud-native-patterns)
 8. [Modern Tooling](#modern-tooling)
-9. [Operational Excellence](#operational-excellence)
-10. [Compliance and Governance](#compliance-and-governance)
+9. [Container Runtimes](#container-runtimes)
+10. [Operational Excellence](#operational-excellence)
+11. [Compliance and Governance](#compliance-and-governance)
 
 ---
 
 ## Core Principles
 
+> **Note:** Examples use `Dockerfile` syntax which is compatible with Docker, Podman, and Buildah.
+> Podman/Buildah also support `Containerfile` as the preferred filename.
+
 ### Minimal Base Images
 ```dockerfile
-# Use minimal, updated base images
-FROM alpine:3.19
+# Use minimal, updated base images with digest pinning for reproducibility
+FROM alpine:3.21
 # Or distroless for even smaller attack surface
-# FROM gcr.io/distroless/static-debian11
+# FROM gcr.io/distroless/static-debian12
+
+# For maximum security, pin by digest:
+# FROM alpine@sha256:<digest>
 ```
 
 ### Multi-Stage Builds
 ```dockerfile
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.23-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o app .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o app .
 
 # Runtime stage
-FROM alpine:3.19
+FROM alpine:3.21
 RUN apk add --no-cache ca-certificates tzdata
-COPY --from=builder /app/app .
+COPY --from=builder --chmod=0755 --chown=1000:1000 /app/app /app
 USER 1000:1000
-CMD ["./app"]
+ENTRYPOINT ["/app"]
 ```
 
 ### Immutable Infrastructure
@@ -97,19 +104,62 @@ services:
       - seccomp:seccomp-profile.json
 ```
 
+### Network Security
+```yaml
+# docker-compose.yml - Use custom networks, never host network
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+    internal: true  # No external access
+
+services:
+  web:
+    networks:
+      - frontend
+      - backend
+    # Only expose necessary ports
+    ports:
+      - "127.0.0.1:8080:8080"  # Bind to localhost only
+  
+  database:
+    networks:
+      - backend  # Internal only, no frontend exposure
+    # No ports exposed to host
+```
+
+```yaml
+# Kubernetes NetworkPolicy - Deny all by default
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+```
+
 ### Vulnerability Scanning
 ```bash
-# Scan images during CI
-docker scan --severity HIGH myimage:latest
-trivy image --severity CRITICAL myimage:latest
-grype myimage:latest
+# Scan images during CI (use pinned tags, not :latest)
+trivy image --severity CRITICAL,HIGH myimage:v1.0.0
+grype myimage:v1.0.0
+
+# Docker Scout (replaced deprecated 'docker scan')
+docker scout cves myimage:v1.0.0
+docker scout quickview myimage:v1.0.0
 ```
 
 ### Secrets Management
 ```dockerfile
-# Use build-time secrets
-RUN --mount=type=secret,id=github_token,target=/root/.ssh/id_rsa \
-    git clone git@github.com:myorg/myrepo.git
+# Use build-time secrets (never stored in image layers)
+RUN --mount=type=secret,id=github_token \
+    GITHUB_TOKEN=$(cat /run/secrets/github_token) && \
+    git clone https://${GITHUB_TOKEN}@github.com/myorg/myrepo.git && \
+    unset GITHUB_TOKEN
 ```
 
 ```yaml
@@ -130,6 +180,64 @@ services:
 
 ## Build Optimization
 
+### Build Context Security (.dockerignore / .containerignore)
+```text
+# .dockerignore (or .containerignore for Podman/Buildah)
+# CRITICAL for security and performance
+# Exclude version control
+.git
+.gitignore
+.svn
+
+# Exclude secrets and credentials
+.env
+.env.*
+*.pem
+*.key
+*.crt
+secrets/
+credentials/
+.aws/
+.ssh/
+
+# Exclude development files
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+.tox/
+.venv/
+venv/
+
+# Exclude IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Exclude documentation (usually not needed in image)
+README.md
+CHANGELOG.md
+LICENSE
+docs/
+
+# Exclude CI/CD configs
+.github/
+.gitlab-ci.yml
+Jenkinsfile
+Dockerfile*
+Containerfile*
+docker-compose*.yml
+podman-compose*.yml
+
+# Exclude test files
+tests/
+test/
+*_test.go
+*.test.js
+```
+
 ### Layer Caching Strategy
 ```dockerfile
 # Order instructions from least to most frequently changed
@@ -142,29 +250,37 @@ RUN go build -o app .
 
 ### BuildKit Features
 ```bash
-# Enable BuildKit
+# Enable BuildKit (default in Docker 23.0+)
 export DOCKER_BUILDKIT=1
 
-# Build with secrets
+# Build with secrets (never stored in layers)
 docker build --secret id=mytoken,src=/local/secret .
 
-# Multi-platform builds
-docker buildx build --platform linux/amd64,linux/arm64 -t myapp:latest .
+# Multi-platform builds with proper versioning
+VERSION=$(git describe --tags --always)
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  --build-arg VERSION=${VERSION} \
+  -t myapp:${VERSION} \
+  -t myapp:latest \
+  --push .
 ```
 
-### Image Compression
+### Image Analysis
 ```bash
-# Use docker-slim for extreme optimization
-docker-slim build --http-probe myimage:latest
+# Use docker-slim for optimization (analyze before slimming)
+docker-slim build --http-probe myimage:v1.0.0
 
-# Or use dive to analyze layers
-dive myimage:latest
+# Use dive to analyze layer efficiency
+dive myimage:v1.0.0
 ```
 
 ### SBOM Generation
 ```bash
 # Generate Software Bill of Materials
-syft myimage:latest -o cyclonedx-json > sbom.json
+VERSION=v1.0.0
+syft myimage:${VERSION} -o cyclonedx-json > sbom-${VERSION}.json
+syft myimage:${VERSION} -o spdx-json > sbom-${VERSION}.spdx.json
 ```
 
 ---
@@ -223,41 +339,74 @@ jobs:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Extract metadata (tags, labels)
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ghcr.io/${{ github.repository }}
+        tags: |
+          type=sha,prefix=
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
     - name: Build and push
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@v6
       with:
         context: .
         platforms: linux/amd64,linux/arm64
         push: true
-        tags: ghcr.io/${{ github.repository }}:latest
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
+        sbom: true
+        provenance: mode=max
     - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
+      uses: aquasecurity/trivy-action@0.28.0
       with:
-        image-ref: 'ghcr.io/${{ github.repository }}:latest'
+        image-ref: 'ghcr.io/${{ github.repository }}:${{ github.sha }}'
         format: 'sarif'
         output: 'trivy-results.sarif'
+        severity: 'CRITICAL,HIGH'
     - name: Upload Trivy scan results
-      uses: github/codeql-action/upload-sarif@v2
+      uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: 'trivy-results.sarif'
 ```
 
 ### GitLab CI Example
 ```yaml
+variables:
+  DOCKER_TLS_CERTDIR: "/certs"
+
 build:
   stage: build
-  image: docker:24.0.5
+  image: docker:27.4
   services:
-    - docker:24.0.5-dind
-  variables:
-    DOCKER_TLS_CERTDIR: "/certs"
+    - docker:27.4-dind
   before_script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   script:
-    - docker buildx build --platform linux/amd64,linux/arm64 -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA --push .
-    - docker buildx build --platform linux/amd64,linux/arm64 -t $CI_REGISTRY_IMAGE:latest --push .
+    - |
+      docker buildx build \
+        --platform linux/amd64,linux/arm64 \
+        --build-arg VERSION=${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA} \
+        --build-arg COMMIT_SHA=$CI_COMMIT_SHA \
+        --build-arg BUILD_DATE=$(date -Iseconds) \
+        -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA \
+        -t $CI_REGISTRY_IMAGE:${CI_COMMIT_TAG:-latest} \
+        --push .
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+scan:
+  stage: test
+  image:
+    name: aquasec/trivy:0.58.0
+    entrypoint: [""]
+  script:
+    - trivy image --exit-code 1 --severity CRITICAL,HIGH $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+  needs: [build]
 ```
 
 ---
@@ -266,8 +415,18 @@ build:
 
 ### Health Checks
 ```dockerfile
+# Option 1: Using curl (if available in image)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:8080/health || exit 1
+
+# Option 2: Using wget (Alpine - smaller than curl)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+
+# Option 3: Native binary health check (recommended for distroless)
+# Build a tiny health check binary into your app
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD ["/healthcheck"]
 ```
 
 ### Resource Constraints
@@ -364,18 +523,35 @@ spec:
 
 ### Container Signing
 ```bash
-# Sign images with cosign
-cosign sign --key cosign.key myimage:latest
+# Sign images with cosign (use versioned tags)
+VERSION=v1.0.0
+cosign sign --key cosign.key myimage:${VERSION}
+
+# Keyless signing with Sigstore (recommended for CI/CD)
+cosign sign myimage:${VERSION}
 
 # Verify signatures
-cosign verify --key cosign.pub myimage:latest
+cosign verify --key cosign.pub myimage:${VERSION}
+
+# Attach SBOM to image
+syft myimage:${VERSION} -o cyclonedx-json | \
+  cosign attach sbom --sbom - myimage:${VERSION}
 ```
 
 ### Multi-Architecture Builds
 ```bash
-# Build for multiple architectures
-docker buildx create --use
-docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t myapp:latest --push .
+# Build for multiple architectures with proper versioning
+docker buildx create --name multiarch --use
+VERSION=$(git describe --tags --always)
+
+docker buildx build \
+  --platform linux/amd64,linux/arm64,linux/arm/v7 \
+  --build-arg VERSION=${VERSION} \
+  --build-arg BUILD_DATE=$(date -Iseconds) \
+  --sbom=true \
+  --provenance=mode=max \
+  -t myapp:${VERSION} \
+  --push .
 ```
 
 ### Container Runtime Security
@@ -383,8 +559,136 @@ docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t myapp:lat
 # Use Falco for runtime security
 falco -r /etc/falco/rules.yaml
 
-# Or use Aqua Security
-aqua trace --container mycontainer
+# Runtime image scanning
+trivy image --scanners vuln,secret,misconfig myimage:v1.0.0
+```
+
+---
+
+## Container Runtimes
+
+### Runtime Comparison
+
+| Feature | Docker | Podman | Buildah |
+|---------|--------|--------|---------|
+| Daemon | Required | Daemonless | Daemonless |
+| Rootless | Optional | Default | Default |
+| OCI Compliant | Yes | Yes | Yes |
+| Compose Support | Native | podman-compose | N/A |
+| Kubernetes YAML | docker stack | podman generate kube | N/A |
+| Build Images | Yes | Yes | Yes (specialized) |
+| Systemd Integration | Limited | Native | N/A |
+
+### Podman (Docker Alternative)
+```bash
+# Podman is a drop-in replacement for Docker CLI
+# Most docker commands work by replacing 'docker' with 'podman'
+
+# Build image (identical syntax)
+podman build -t myapp:v1.0.0 .
+
+# Run container (rootless by default)
+podman run --rm -it myapp:v1.0.0
+
+# Generate Kubernetes YAML from running container
+podman generate kube mycontainer > pod.yaml
+
+# Run pods from Kubernetes YAML
+podman play kube pod.yaml
+
+# Rootless containers with user namespaces
+podman run --userns=auto myapp:v1.0.0
+```
+
+```yaml
+# podman-compose.yml (compatible with docker-compose)
+version: "3"
+services:
+  app:
+    image: myapp:v1.0.0
+    read_only: true
+    user: "1000:1000"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+```
+
+### Buildah (OCI Image Builder)
+```bash
+# Buildah specializes in building OCI images without a daemon
+# Ideal for CI/CD environments and air-gapped builds
+
+# Build from Dockerfile/Containerfile
+buildah build -t myapp:v1.0.0 .
+
+# Build from Containerfile (preferred naming)
+buildah build -f Containerfile -t myapp:v1.0.0 .
+
+# Scripted builds (no Dockerfile needed)
+container=$(buildah from alpine:3.21)
+buildah run $container -- apk add --no-cache ca-certificates
+buildah copy $container ./app /app
+buildah config --user 1000:1000 $container
+buildah config --entrypoint '["/app"]' $container
+buildah commit $container myapp:v1.0.0
+
+# Push to registry
+buildah push myapp:v1.0.0 docker://registry.example.com/myapp:v1.0.0
+```
+
+### Skopeo (Image Operations)
+```bash
+# Copy images between registries without pulling locally
+skopeo copy docker://docker.io/library/alpine:3.21 \
+  docker://registry.example.com/alpine:3.21
+
+# Inspect remote image without pulling
+skopeo inspect docker://myapp:v1.0.0
+
+# Copy with signature verification
+skopeo copy --sign-by keyid docker://source/image:tag \
+  docker://dest/image:tag
+
+# Sync entire repository
+skopeo sync --src docker --dest docker \
+  registry.source.com/repo registry.dest.com/
+```
+
+### CI/CD with Podman/Buildah
+```yaml
+# GitHub Actions with Podman
+name: Build with Podman
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build image
+      run: |
+        podman build \
+          --format oci \
+          --label org.opencontainers.image.revision=${{ github.sha }} \
+          -t ghcr.io/${{ github.repository }}:${{ github.sha }} .
+    - name: Push to GHCR
+      run: |
+        echo ${{ secrets.GITHUB_TOKEN }} | podman login ghcr.io -u ${{ github.actor }} --password-stdin
+        podman push ghcr.io/${{ github.repository }}:${{ github.sha }}
+```
+
+```yaml
+# GitLab CI with Buildah (no DinD needed)
+build:
+  stage: build
+  image: quay.io/buildah/stable:v1.38
+  variables:
+    STORAGE_DRIVER: vfs
+    BUILDAH_FORMAT: oci
+  script:
+    - buildah build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA .
+    - buildah login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - buildah push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
 ```
 
 ---
@@ -426,11 +730,23 @@ annotations:
 
 ### OCI Compliance
 ```dockerfile
-# OCI-compliant labels
-LABEL org.opencontainers.image.authors="team@example.com"
+# OCI-compliant labels - Use build args for dynamic values
+ARG VERSION=dev
+ARG COMMIT_SHA=unknown
+ARG BUILD_DATE=unknown
+
+LABEL org.opencontainers.image.title="My Application"
 LABEL org.opencontainers.image.description="My production application"
-LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.version="${VERSION}"
+LABEL org.opencontainers.image.revision="${COMMIT_SHA}"
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.authors="team@example.com"
+LABEL org.opencontainers.image.url="https://github.com/myorg/myapp"
 LABEL org.opencontainers.image.source="https://github.com/myorg/myapp"
+LABEL org.opencontainers.image.documentation="https://github.com/myorg/myapp#readme"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.vendor="My Organization"
+LABEL org.opencontainers.image.base.name="alpine:3.21"
 ```
 
 ### Policy Enforcement
@@ -446,29 +762,53 @@ allow {
 
 ### Container Image Verification
 ```bash
-# Verify image integrity
-cosign verify myimage:latest --key cosign.pub
+# Verify image integrity (use versioned tags, not :latest)
+cosign verify myimage:v1.0.0 --key cosign.pub
+
+# Keyless verification with Sigstore (recommended)
+cosign verify myimage:v1.0.0 \
+  --certificate-identity=user@example.com \
+  --certificate-oidc-issuer=https://accounts.google.com
 
 # Check for vulnerabilities
-grype myimage:latest
+grype myimage:v1.0.0
 ```
 
 ---
 
 ## Validation Checklist
-- [ ] Container runs as non-root user
-- [ ] Base image is minimal and up-to-date
-- [ ] Multi-stage build is implemented
-- [ ] Health checks are configured
-- [ ] Resource limits are set
-- [ ] Secrets are properly managed
-- [ ] Image is signed
-- [ ] SBOM is generated
-- [ ] Vulnerability scanning passes
+
+### Security
+- [ ] Container runs as non-root user (UID >= 1000)
+- [ ] Base image is minimal, up-to-date, and pinned (digest or version)
+- [ ] No `latest` tags in production
 - [ ] Read-only filesystem is used where possible
-- [ ] Capabilities are minimized
-- [ ] Structured logging is implemented
-- [ ] Metrics are exposed
+- [ ] Capabilities are minimized (`cap_drop: ALL`)
+- [ ] `no-new-privileges` security option is set
+- [ ] Secrets are properly managed (not in environment variables or layers)
+- [ ] `.dockerignore` excludes sensitive files
+- [ ] Image is signed with cosign/notation
+- [ ] Vulnerability scanning passes (CRITICAL/HIGH = 0)
+- [ ] SBOM is generated and stored
+
+### Build
+- [ ] Multi-stage build is implemented
+- [ ] Build context is minimal
+- [ ] Layer caching is optimized
+- [ ] OCI labels are complete
+- [ ] Build is reproducible
+
+### Runtime
+- [ ] Health checks are configured
+- [ ] Resource limits are set (CPU, memory, pids)
+- [ ] Graceful shutdown is implemented
+- [ ] Network isolation is configured
+- [ ] Volume mounts use noexec where appropriate
+
+### Observability
+- [ ] Structured logging (JSON) is implemented
+- [ ] Metrics are exposed (Prometheus format)
+- [ ] Distributed tracing is configured
 
 ---
 
@@ -476,13 +816,18 @@ grype myimage:latest
 
 ### Documentation
 - [Docker Security Best Practices](https://docs.docker.com/engine/security/)
+- [Podman Documentation](https://docs.podman.io/)
+- [Buildah Documentation](https://buildah.io/)
 - [Kubernetes Security Guidelines](https://kubernetes.io/docs/concepts/security/)
 - [Open Container Initiative](https://opencontainers.org/)
 - [CNCF Cloud Native Landscape](https://landscape.cncf.io/)
 
 ### Tools
-- [BuildKit](https://docs.docker.com/develop/develop-images/build_enhancements/)
+- [BuildKit](https://github.com/moby/buildkit)
 - [Docker Buildx](https://docs.docker.com/buildx/working-with-buildx/)
+- [Podman](https://podman.io/)
+- [Buildah](https://buildah.io/)
+- [Skopeo](https://github.com/containers/skopeo)
 - [Cosign](https://github.com/sigstore/cosign)
 - [Trivy](https://github.com/aquasecurity/trivy)
 - [Syft](https://github.com/anchore/syft)
@@ -490,5 +835,6 @@ grype myimage:latest
 
 ### Communities
 - [CNCF](https://www.cncf.io/)
+- [Containers GitHub Org](https://github.com/containers) (Podman, Buildah, Skopeo)
 - [Docker Community](https://www.docker.com/community)
 - [Kubernetes Community](https://kubernetes.io/community/)
