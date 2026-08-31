@@ -1,6 +1,10 @@
+
+
 # Container Image Best Practices
 
 A comprehensive guide to building secure, efficient, and production-ready container images using current state-of-the-art techniques. This guide focuses on OCI-compliant practices that work across container runtimes including **Docker**, **Podman**, and **Buildah**. Container technology evolves rapidly - always verify recommendations against the latest documentation and security advisories.
+
+Support for this repository is available through [GitHub Sponsors](https://github.com/sponsors/flavioaiello).
 
 ## Table of Contents
 1. [Core Principles](#core-principles)
